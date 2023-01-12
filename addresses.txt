@@ -1,0 +1,3 @@
+Deploying contracts with account:  0x6C59A7c3b47BFA21C8b04109A59d807E92429106
+Account balance:  244714511855917716
+WavePortal address:  0xf01C614CA477fc960B6C4C4fd60F935375a88ED7
