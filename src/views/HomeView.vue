@@ -1,15 +1,30 @@
 <template>
   <main
-    class="bg-gray-900 min-h-screen flex items-center justify-center flex-col"
+    class="bg-gray-900 min-h-screen flex items-center justify-center flex-col p-20"
   >
     <div
-      class="rounded-md border border-gray-700 text-white bg-gray-800 p-6 mx-auto w-full max-w-[400px]"
+      class="rounded-md border border-gray-700 text-white bg-gray-800 p-6 mx-auto w-full max-w-[600px]"
     >
       <h1 class="text-2xl mb-4">👋 Hey there!</h1>
       <p class="text-base mb-4">
         I am Farza and I worked on self-driving cars so that's pretty cool
         right? Connect your Ethereum wallet and wave at me!
       </p>
+      <div class="mb-2">
+        <label
+          for="first_name"
+          class="block mb-2 text-sm font-medium text-gray-900 dark:text-white"
+          >Wave message</label
+        >
+        <input
+          v-model="message"
+          type="text"
+          id="first_name"
+          class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+          placeholder="John"
+          required
+        />
+      </div>
       <button
         @click="wave"
         type="button"
@@ -17,14 +32,6 @@
       >
         <span v-if="loading">Loading...</span>
         <span v-else>Wave at me</span>
-      </button>
-      <button
-        @click="getAllWaves"
-        type="button"
-        class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 mr-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
-      >
-        <span v-if="loading">Loading...</span>
-        <span v-else>Get all waves</span>
       </button>
       <button
         v-if="!currentAccount"
@@ -47,11 +54,12 @@
       </div>
     </div>
     <div
-      class="mt-8 rounded-md border border-gray-700 text-white bg-gray-800 p-6 mx-auto w-full max-w-[400px]"
+      class="mt-8 rounded-md border border-gray-700 text-white bg-gray-800 p-6 mx-auto w-full max-w-[600px]"
+      v-if="allWaves?.length > 0"
     >
       <h1 class="text-white text-lg mb-4">All waves</h1>
       <div
-        class="border border-gray-700 p-4 rounded"
+        class="border border-gray-700 p-4 rounded mb-2"
         v-for="wave in allWaves"
         :key="wave"
       >
@@ -64,14 +72,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watchEffect } from "vue";
 import { ethers } from "ethers";
 import abi from "@/utils/WavePortal.json";
 
 const currentAccount = ref(null);
 const loading = ref(false);
+const message = ref(null);
 
-const contractAddress = "0xE24e0eC01B77A39c15D35F0d22c08F81280624DC";
+const contractAddress = "0x98756A90b9bbD1Cc9A6e1b61b97D6Cf9317242a0";
 const contractABI = abi.abi;
 
 const getEthereumObject = () => window.ethereum;
@@ -149,7 +158,9 @@ const wave = async () => {
       /*
        * Execute the actual wave from your smart contract
        */
-      const waveTxn = await wavePortalContract.wave("this is a message");
+      const waveTxn = await wavePortalContract.wave(message.value, {
+        gasLimit: 300000,
+      });
       console.log("Mining...", waveTxn.hash);
 
       await waveTxn.wait();
@@ -169,10 +180,9 @@ const allWaves = ref([]);
 
 const getAllWaves = async () => {
   loading.value = true;
-  try {
-    const { ethereum } = window;
+  const { ethereum } = window;
 
-    console.log(ethereum);
+  try {
     if (ethereum) {
       const provider = new ethers.providers.Web3Provider(ethereum);
       const signer = provider.getSigner();
@@ -181,28 +191,16 @@ const getAllWaves = async () => {
         contractABI,
         signer
       );
-
-      /*
-       * Call the getAllWaves method from your Smart Contract
-       */
       const waves = await wavePortalContract.getAllWaves();
 
-      /*
-       * We only need address, timestamp, and message in our UI so let's
-       * pick those out
-       */
-      let wavesCleaned = [];
-      waves.forEach((wave) => {
-        wavesCleaned.push({
+      const wavesCleaned = waves.map((wave) => {
+        return {
           address: wave.waver,
           timestamp: new Date(wave.timestamp * 1000),
           message: wave.message,
-        });
+        };
       });
 
-      /*
-       * Store our data in React State
-       */
       allWaves.value = wavesCleaned;
     } else {
       console.log("Ethereum object doesn't exist!");
@@ -213,7 +211,42 @@ const getAllWaves = async () => {
   loading.value = false;
 };
 
+watchEffect(async (onCleanup) => {
+  let wavePortalContract;
+
+  const onNewWave = (from, timestamp, message) => {
+    console.log("NewWave", from, timestamp, message);
+    allWaves.value = [
+      ...allWaves.value,
+      {
+        address: from,
+        timestamp: new Date(timestamp * 1000),
+        message: message,
+      },
+    ];
+  };
+
+  if (window.ethereum) {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner();
+
+    wavePortalContract = new ethers.Contract(
+      contractAddress,
+      contractABI,
+      signer
+    );
+    wavePortalContract.on("NewWave", onNewWave);
+  }
+
+  onCleanup(() => {
+    if (wavePortalContract) {
+      wavePortalContract.off("NewWave", onNewWave);
+    }
+  });
+});
+
 onMounted(async () => {
   await findMetaMaskAccount();
+  await getAllWaves();
 });
 </script>
