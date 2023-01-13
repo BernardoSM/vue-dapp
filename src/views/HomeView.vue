@@ -1,5 +1,7 @@
 <template>
-  <main class="bg-gray-900 min-h-screen flex items-center">
+  <main
+    class="bg-gray-900 min-h-screen flex items-center justify-center flex-col"
+  >
     <div
       class="rounded-md border border-gray-700 text-white bg-gray-800 p-6 mx-auto w-full max-w-[400px]"
     >
@@ -15,6 +17,14 @@
       >
         <span v-if="loading">Loading...</span>
         <span v-else>Wave at me</span>
+      </button>
+      <button
+        @click="getAllWaves"
+        type="button"
+        class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 mr-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
+      >
+        <span v-if="loading">Loading...</span>
+        <span v-else>Get all waves</span>
       </button>
       <button
         v-if="!currentAccount"
@@ -36,7 +46,20 @@
         </span>
       </div>
     </div>
-    <h1></h1>
+    <div
+      class="mt-8 rounded-md border border-gray-700 text-white bg-gray-800 p-6 mx-auto w-full max-w-[400px]"
+    >
+      <h1 class="text-white text-lg mb-4">All waves</h1>
+      <div
+        class="border border-gray-700 p-4 rounded"
+        v-for="wave in allWaves"
+        :key="wave"
+      >
+        <div class="truncate">Address: {{ wave.address }}</div>
+        <div>Time: {{ wave.timestamp.toString() }}</div>
+        <div>Message: {{ wave.message }}</div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -48,7 +71,7 @@ import abi from "@/utils/WavePortal.json";
 const currentAccount = ref(null);
 const loading = ref(false);
 
-const contractAddress = "0xf01C614CA477fc960B6C4C4fd60F935375a88ED7";
+const contractAddress = "0xE24e0eC01B77A39c15D35F0d22c08F81280624DC";
 const contractABI = abi.abi;
 
 const getEthereumObject = () => window.ethereum;
@@ -126,7 +149,7 @@ const wave = async () => {
       /*
        * Execute the actual wave from your smart contract
        */
-      const waveTxn = await wavePortalContract.wave();
+      const waveTxn = await wavePortalContract.wave("this is a message");
       console.log("Mining...", waveTxn.hash);
 
       await waveTxn.wait();
@@ -140,6 +163,54 @@ const wave = async () => {
   } catch (error) {
     console.log(error);
   }
+};
+
+const allWaves = ref([]);
+
+const getAllWaves = async () => {
+  loading.value = true;
+  try {
+    const { ethereum } = window;
+
+    console.log(ethereum);
+    if (ethereum) {
+      const provider = new ethers.providers.Web3Provider(ethereum);
+      const signer = provider.getSigner();
+      const wavePortalContract = new ethers.Contract(
+        contractAddress,
+        contractABI,
+        signer
+      );
+
+      /*
+       * Call the getAllWaves method from your Smart Contract
+       */
+      const waves = await wavePortalContract.getAllWaves();
+
+      /*
+       * We only need address, timestamp, and message in our UI so let's
+       * pick those out
+       */
+      let wavesCleaned = [];
+      waves.forEach((wave) => {
+        wavesCleaned.push({
+          address: wave.waver,
+          timestamp: new Date(wave.timestamp * 1000),
+          message: wave.message,
+        });
+      });
+
+      /*
+       * Store our data in React State
+       */
+      allWaves.value = wavesCleaned;
+    } else {
+      console.log("Ethereum object doesn't exist!");
+    }
+  } catch (error) {
+    console.log(error);
+  }
+  loading.value = false;
 };
 
 onMounted(async () => {
